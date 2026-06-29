@@ -1,0 +1,123 @@
+services:
+  mariadb:
+    image: mariadb:11
+    container_name: mobile-bank-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root1234
+      MARIADB_DATABASE: chungjeong_db
+      MARIADB_USER: testuser
+      MARIADB_PASSWORD: 1234
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    networks:
+      - mobile-bank-net
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: mobile-bank-redis
+    restart: unless-stopped
+    networks:
+      - mobile-bank-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend-spring-api:
+    build:
+      context: ./backend-spring-api
+      dockerfile: Dockerfile
+    container_name: mobile-bank-backend
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 3004
+      SPRING_DATASOURCE_URL: jdbc:mariadb://mariadb:3306/chungjeong_db
+      SPRING_DATASOURCE_USERNAME: testuser
+      SPRING_DATASOURCE_PASSWORD: 1234
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mobile-bank-net
+
+  frontend-admin:
+    build:
+      context: ./frontend-admin
+      dockerfile: Dockerfile
+    container_name: mobile-bank-frontend-admin
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_API_BASE_URL: /api
+    depends_on:
+      - backend-spring-api
+    networks:
+      - mobile-bank-net
+
+  frontend-mobile-view:
+    build:
+      context: ./frontend-mobile-view
+      dockerfile: Dockerfile
+    container_name: mobile-bank-frontend-mobile-view
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_API_BASE_URL: /api
+    depends_on:
+      - backend-spring-api
+    networks:
+      - mobile-bank-net
+
+  frontend-mobile-action:
+    build:
+      context: ./frontend-mobile-action
+      dockerfile: Dockerfile
+    container_name: mobile-bank-frontend-mobile-action
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3003
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_API_BASE_URL: /api
+    depends_on:
+      - backend-spring-api
+    networks:
+      - mobile-bank-net
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: mobile-bank-nginx
+    restart: unless-stopped
+    depends_on:
+      - frontend-admin
+      - frontend-mobile-view
+      - frontend-mobile-action
+      - backend-spring-api
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - mobile-bank-net
+
+volumes:
+  mariadb-data:
+
+networks:
+  mobile-bank-net:
+    driver: bridge
