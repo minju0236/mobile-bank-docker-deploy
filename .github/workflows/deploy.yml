@@ -31,7 +31,13 @@ jobs:
             git reset --hard origin/main
 
             docker compose down
-            docker compose up -d --build
+
+            docker compose build backend-spring-api
+            docker compose build frontend-admin
+            docker compose build frontend-mobile-view
+            docker compose build frontend-mobile-action
+
+            docker compose up -d
 
             docker compose ps
           EOF
